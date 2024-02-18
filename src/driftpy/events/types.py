@@ -131,7 +131,7 @@ DEFAULT_EVENT_TYPES: frozenset[EventType] = frozenset({
 
 
 @dataclass
-class EventSubscriptionOptions
+class EventSubscriptionOptions:
     address: Pubkey = DRIFT_PROGRAM_ID
     event_types: frozenset[EventType] = DEFAULT_EVENT_TYPES
     max_events_per_type: int = 4096
