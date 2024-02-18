@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import abstractmethod
 from solana.transaction import Signature
 from solana.rpc.commitment import Commitment, Confirmed
@@ -73,7 +73,7 @@ class WrappedEvent:
 
 SortFn = Callable[[WrappedEvent, WrappedEvent], int]
 
-EventSubscriptionOrderBy = Union["blockchain", "client"]
+EventSubscriptionOrderBy = Literal["blockchain", "client"]
 Asc = Literal["asc"]
 Desc = Literal["desc"]
 EventSubscriptionOrderDirection = Union[Asc, Desc]
@@ -112,7 +112,7 @@ class LogProvider:
         pass
 
 
-DEFAULT_EVENT_TYPES = (
+DEFAULT_EVENT_TYPES: frozenset[EventType] = frozenset({
     "NewUserRecord",
     "DepositRecord",
     "SpotInterestRecord",
@@ -127,20 +127,20 @@ DEFAULT_EVENT_TYPES = (
     "OrderRecord",
     "OrderActionRecord",
     "SwapRecord",
-)
+})
 
 
 @dataclass
 class EventSubscriptionOptions:
     address: Pubkey = DRIFT_PROGRAM_ID
-    event_types: tuple[EventType] = DEFAULT_EVENT_TYPES
+    event_types: frozenset[EventType] = DEFAULT_EVENT_TYPES
     max_events_per_type: int = 4096
     order_by: EventSubscriptionOrderBy = "blockchain"
     order_dir: EventSubscriptionOrderDirection = "asc"
-    commitment: Commitment = "confirmed"
+    commitment: Commitment = Confirmed
     max_tx: int = 4096
-    log_provider_config: LogProviderConfig = WebsocketLogProviderConfig()
-    until_tx: Signature = None
+    log_provider_config: LogProviderConfig = field(default_factory=WebsocketLogProviderConfig)
+    until_tx: Signature | None = None
 
     @staticmethod
     def default():
