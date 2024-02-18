@@ -44,7 +44,8 @@ from solders.system_program import ID as SYS_PROGRAM_ID
 
 DEFAULT_USER_NAME = "Main Account"
 
-DEFAULT_TX_OPTIONS = TxOpts(skip_confirmation=False, preflight_commitment=Processed)
+DEFAULT_TX_OPTIONS = TxOpts(skip_confirmation=False,
+                            preflight_commitment=Processed)
 
 
 class DriftClient:
@@ -57,7 +58,6 @@ class DriftClient:
         connection: AsyncClient,
         wallet: Union[Keypair, Wallet],
         env: DriftEnv = "mainnet",
-        program_id: Optional[Pubkey] = DRIFT_PROGRAM_ID,
         opts: TxOpts = DEFAULT_TX_OPTIONS,
         authority: Pubkey = None,
         account_subscription: Optional[
@@ -87,7 +87,7 @@ class DriftClient:
         idl = Idl.from_json(raw)
 
         provider = Provider(connection, wallet, opts)
-        self.program_id = program_id
+        self.program_id = DRIFT_PROGRAM_ID
         self.program = Program(
             idl,
             self.program_id,
@@ -136,7 +136,8 @@ class DriftClient:
         self.tx_version = tx_version if tx_version is not None else Legacy
 
         self.tx_sender = (
-            StandardTxSender(self.connection, opts) if tx_sender is None else tx_sender
+            StandardTxSender(
+                self.connection, opts) if tx_sender is None else tx_sender
         )
 
     async def subscribe(self):
@@ -260,19 +261,24 @@ class DriftClient:
         ixs: Union[Instruction, list[Instruction]],
         signers=None,
         lookup_tables: list[AddressLookupTableAccount] = None,
+        tx_version: Optional[Union[Legacy, int]] = None,
     ) -> TxSigAndSlot:
         if isinstance(ixs, Instruction):
             ixs = [ixs]
+
+        if not tx_version:
+            tx_version = self.tx_version
 
         if self.tx_params.compute_units is not None:
             ixs.insert(0, set_compute_unit_limit(self.tx_params.compute_units))
 
         if self.tx_params.compute_units_price is not None:
-            ixs.insert(1, set_compute_unit_price(self.tx_params.compute_units_price))
+            ixs.insert(1, set_compute_unit_price(
+                self.tx_params.compute_units_price))
 
-        if self.tx_version == Legacy:
+        if tx_version == Legacy:
             tx = await self.tx_sender.get_legacy_tx(ixs, self.wallet.payer, signers)
-        elif self.tx_version == 0:
+        elif tx_version == 0:
             if lookup_tables is None:
                 lookup_tables = [await self.fetch_market_lookup_table()]
             tx = await self.tx_sender.get_versioned_tx(
@@ -439,7 +445,8 @@ class DriftClient:
         if name is None:
             name = "Subaccount " + str(sub_account_id + 1)
 
-        ix = self.get_initialize_user_instructions(sub_account_id, name, referrer_info)
+        ix = self.get_initialize_user_instructions(
+            sub_account_id, name, referrer_info)
         ixs.append(ix)
         return (await self.send_ixs(ixs)).tx_sig
 
@@ -454,8 +461,8 @@ class DriftClient:
                 accounts={
                     "user_stats": user_stats_public_key,
                     "state": state_public_key,
-                    "authority": self.authority,
-                    "payer": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
+                    "payer": self.wallet.payer.pubkey(),
                     "rent": RENT,
                     "system_program": ID,
                 },
@@ -477,7 +484,8 @@ class DriftClient:
         remaining_accounts = []
         if referrer_info is not None:
             remaining_accounts.append(
-                AccountMeta(referrer_info.referrer, is_writable=True, is_signer=False)
+                AccountMeta(referrer_info.referrer,
+                            is_writable=True, is_signer=False)
             )
             remaining_accounts.append(
                 AccountMeta(
@@ -493,8 +501,8 @@ class DriftClient:
                     "user": user_public_key,
                     "user_stats": user_stats_public_key,
                     "state": state_public_key,
-                    "authority": self.authority,
-                    "payer": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
+                    "payer": self.wallet.payer.pubkey(),
                     "rent": RENT,
                     "system_program": ID,
                 },
@@ -565,7 +573,8 @@ class DriftClient:
             else self.get_associated_token_account_public_key(spot_market_index)
         )
 
-        spot_market_pk = get_spot_market_public_key(self.program_id, spot_market_index)
+        spot_market_pk = get_spot_market_public_key(
+            self.program_id, spot_market_index)
         spot_vault_public_key = get_spot_market_vault_public_key(
             self.program_id, spot_market_index
         )
@@ -584,7 +593,7 @@ class DriftClient:
                     "user": user_account_public_key,
                     "user_stats": self.get_user_stats_public_key(),
                     "user_token_account": user_token_account,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "token_program": TOKEN_PROGRAM_ID,
                 },
                 remaining_accounts=remaining_accounts,
@@ -655,7 +664,7 @@ class DriftClient:
                     "user": self.get_user_account_public_key(sub_account_id),
                     "user_stats": self.get_user_stats_public_key(),
                     "user_token_account": user_token_account,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "token_program": TOKEN_PROGRAM_ID,
                 },
                 remaining_accounts=remaining_accounts,
@@ -689,8 +698,10 @@ class DriftClient:
         from_sub_account_id: int,
         to_sub_account_id: int,
     ):
-        from_user_public_key = self.get_user_account_public_key(from_sub_account_id)
-        to_user_public_key = self.get_user_account_public_key(to_sub_account_id)
+        from_user_public_key = self.get_user_account_public_key(
+            from_sub_account_id)
+        to_user_public_key = self.get_user_account_public_key(
+            to_sub_account_id)
 
         if from_sub_account_id not in self.users:
             from_user_account = await self.program.account["User"].fetch(
@@ -757,7 +768,8 @@ class DriftClient:
         sub_account_id = self.get_sub_account_id_for_ix(sub_account_id)
 
         order_params.set_spot()
-        user_account_public_key = self.get_user_account_public_key(sub_account_id)
+        user_account_public_key = self.get_user_account_public_key(
+            sub_account_id)
 
         remaining_accounts = self.get_remaining_accounts(
             readable_spot_market_indexes=[
@@ -804,7 +816,8 @@ class DriftClient:
         sub_account_id = self.get_sub_account_id_for_ix(sub_account_id)
 
         order_params.set_perp()
-        user_account_public_key = self.get_user_account_public_key(sub_account_id)
+        user_account_public_key = self.get_user_account_public_key(
+            sub_account_id)
         user_stats_public_key = self.get_user_stats_public_key()
         remaining_accounts = self.get_remaining_accounts(
             readable_perp_market_indexes=[order_params.market_index],
@@ -856,7 +869,8 @@ class DriftClient:
     ):
         sub_account_id = self.get_sub_account_id_for_ix(sub_account_id)
 
-        user_account_public_key = self.get_user_account_public_key(sub_account_id)
+        user_account_public_key = self.get_user_account_public_key(
+            sub_account_id)
         user_stats_public_key = self.get_user_stats_public_key()
 
         readable_perp_market_indexes = []
@@ -868,7 +882,8 @@ class DriftClient:
                 readable_perp_market_indexes.append(order_param.market_index)
             else:
                 if len(readable_spot_market_indexes) == 0:
-                    readable_spot_market_indexes.append(QUOTE_SPOT_MARKET_INDEX)
+                    readable_spot_market_indexes.append(
+                        QUOTE_SPOT_MARKET_INDEX)
 
                 readable_spot_market_indexes.append(order_param.market_index)
 
@@ -928,7 +943,7 @@ class DriftClient:
                 accounts={
                     "state": self.get_state_public_key(),
                     "user": self.get_user_account_public_key(sub_account_id),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer,
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -943,7 +958,8 @@ class DriftClient:
 
         return (
             await self.send_ixs(
-                self.get_cancel_order_by_user_id_ix(user_order_id, sub_account_id),
+                self.get_cancel_order_by_user_id_ix(
+                    user_order_id, sub_account_id),
             )
         ).tx_sig
 
@@ -962,7 +978,7 @@ class DriftClient:
                 accounts={
                     "state": self.get_state_public_key(),
                     "user": self.get_user_account_public_key(sub_account_id),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1015,7 +1031,7 @@ class DriftClient:
                 accounts={
                     "state": self.get_state_public_key(),
                     "user": self.get_user_account_public_key(sub_account_id),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1066,7 +1082,8 @@ class DriftClient:
         cancel_orders_ix = self.get_cancel_orders_ix(
             market_type, market_index, direction, sub_account_id
         )
-        place_orders_ix = self.get_place_orders_ix(place_order_params, sub_account_id)
+        place_orders_ix = self.get_place_orders_ix(
+            place_order_params, sub_account_id)
         return [cancel_orders_ix, place_orders_ix]
 
     async def modify_order(
@@ -1104,7 +1121,7 @@ class DriftClient:
                 accounts={
                     "state": self.get_state_public_key(),
                     "user": self.get_user_account_public_key(sub_account_id),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1145,7 +1162,7 @@ class DriftClient:
                 accounts={
                     "state": self.get_state_public_key(),
                     "user": self.get_user_account_public_key(sub_account_id),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1179,7 +1196,8 @@ class DriftClient:
 
         order_params.set_perp()
 
-        user_account_public_key = self.get_user_account_public_key(sub_account_id)
+        user_account_public_key = self.get_user_account_public_key(
+            sub_account_id)
 
         remaining_accounts = self.get_remaining_accounts(
             writable_perp_market_indexes=[order_params.market_index],
@@ -1190,7 +1208,8 @@ class DriftClient:
         if maker_info is not None:
             maker_order_id = maker_info.order.order_id
             remaining_accounts.append(
-                AccountMeta(pubkey=maker_info.maker, is_signer=False, is_writable=True)
+                AccountMeta(pubkey=maker_info.maker,
+                            is_signer=False, is_writable=True)
             )
 
         return self.program.instruction["place_and_take_perp_order"](
@@ -1201,7 +1220,7 @@ class DriftClient:
                     "state": self.get_state_public_key(),
                     "user": user_account_public_key,
                     "user_stats": self.get_user_stats_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1248,7 +1267,7 @@ class DriftClient:
                 accounts={
                     "state": self.get_state_public_key(),
                     "user": user_account_public_key,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1269,7 +1288,8 @@ class DriftClient:
         """
         return (
             await self.send_ixs(
-                [self.get_remove_liquidity_ix(amount, market_index, sub_account_id)]
+                [self.get_remove_liquidity_ix(
+                    amount, market_index, sub_account_id)]
             )
         ).tx_sig
 
@@ -1282,7 +1302,8 @@ class DriftClient:
             writable_perp_market_indexes=[market_index],
             user_accounts=[self.get_user_account(sub_account_id)],
         )
-        user_account_public_key = self.get_user_account_public_key(sub_account_id)
+        user_account_public_key = self.get_user_account_public_key(
+            sub_account_id)
 
         return self.program.instruction["remove_perp_lp_shares"](
             amount,
@@ -1291,7 +1312,7 @@ class DriftClient:
                 accounts={
                     "state": get_state_public_key(self.program_id),
                     "user": user_account_public_key,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1406,7 +1427,8 @@ class DriftClient:
         liq_user_account = self.get_user_account(liq_sub_account_id)
 
         remaining_accounts = self.get_remaining_accounts(
-            writable_spot_market_indexes=[liability_market_index, asset_market_index],
+            writable_spot_market_indexes=[
+                liability_market_index, asset_market_index],
             user_accounts=[user_account, liq_user_account],
         )
 
@@ -1418,7 +1440,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "user": user_pk,
                     "user_stats": user_stats_pk,
                     "liquidator": liq_pk,
@@ -1488,7 +1510,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "user": user_pk,
                     "user_stats": user_stats_pk,
                     "liquidator": liq_pk,
@@ -1560,7 +1582,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "user": user_pk,
                     "user_stats": user_stats_pk,
                     "liquidator": liq_pk,
@@ -1602,7 +1624,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "user": settlee_user_public_key,
                     "spot_market_vault": get_spot_market_vault_public_key(
                         self.program_id, QUOTE_SPOT_MARKET_INDEX
@@ -1685,7 +1707,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "user": user_pk,
                     "user_stats": user_stats_pk,
                     "liquidator": liq_pk,
@@ -1746,8 +1768,10 @@ class DriftClient:
             user_accounts=[user_account, liq_user_account],
         )
 
-        if_vault = get_insurance_fund_vault_public_key(self.program_id, market_index)
-        spot_vault = get_spot_market_vault_public_key(self.program_id, market_index)
+        if_vault = get_insurance_fund_vault_public_key(
+            self.program_id, market_index)
+        spot_vault = get_spot_market_vault_public_key(
+            self.program_id, market_index)
         dc_signer = get_drift_client_signer_public_key(self.program_id)
 
         return self.program.instruction["resolve_perp_bankruptcy"](
@@ -1756,7 +1780,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "user": user_pk,
                     "user_stats": user_stats_pk,
                     "liquidator": liq_pk,
@@ -1806,7 +1830,8 @@ class DriftClient:
             )
         ]
 
-        spot_pk = get_spot_market_public_key(self.program_id, QUOTE_SPOT_MARKET_INDEX)
+        spot_pk = get_spot_market_public_key(
+            self.program_id, QUOTE_SPOT_MARKET_INDEX)
         spot_account_infos = [
             AccountMeta(
                 pubkey=spot_pk,
@@ -1824,7 +1849,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -1864,7 +1889,7 @@ class DriftClient:
                     "user_stats": get_user_stats_account_public_key(
                         self.program_id, self.authority
                     ),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "insurance_fund_vault": get_insurance_fund_vault_public_key(
                         self.program_id, spot_market_index
                     ),
@@ -1903,7 +1928,7 @@ class DriftClient:
                     "user_stats": get_user_stats_account_public_key(
                         self.program_id, self.authority
                     ),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "insurance_fund_vault": get_insurance_fund_vault_public_key(
                         self.program_id, spot_market_index
                     ),
@@ -1950,7 +1975,7 @@ class DriftClient:
                     "user_stats": get_user_stats_account_public_key(
                         self.program_id, self.authority
                     ),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "insurance_fund_vault": get_insurance_fund_vault_public_key(
                         self.program_id, spot_market_index
                     ),
@@ -2001,7 +2026,7 @@ class DriftClient:
                     "user_stats": get_user_stats_account_public_key(
                         self.program_id, self.authority
                     ),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                     "spot_market_vault": get_spot_market_vault_public_key(
                         self.program_id, spot_market_index
                     ),
@@ -2044,8 +2069,8 @@ class DriftClient:
                         self.program_id, self.authority
                     ),
                     "state": get_state_public_key(self.program_id),
-                    "authority": self.authority,
-                    "payer": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
+                    "payer": self.wallet.payer.pubkey(),
                     "rent": RENT,
                     "system_program": ID,
                 }
@@ -2092,14 +2117,17 @@ class DriftClient:
         for maker in maker_info:
             user_accounts.append(maker.maker_user_account)
 
-        remaining_accounts = self.get_remaining_accounts(user_accounts, [market_index])
+        remaining_accounts = self.get_remaining_accounts(
+            user_accounts, [market_index])
 
         for maker in maker_info:
             remaining_accounts.append(
-                AccountMeta(pubkey=maker.maker, is_writable=True, is_signer=False)
+                AccountMeta(pubkey=maker.maker,
+                            is_writable=True, is_signer=False)
             )
             remaining_accounts.append(
-                AccountMeta(pubkey=maker.maker_stats, is_writable=True, is_signer=False)
+                AccountMeta(pubkey=maker.maker_stats,
+                            is_writable=True, is_signer=False)
             )
 
         if referrer_info:
@@ -2131,7 +2159,7 @@ class DriftClient:
                     "filler_stats": filler_stats_pubkey,
                     "user": user_account_pubkey,
                     "user_stats": user_stats_pubkey,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -2147,7 +2175,7 @@ class DriftClient:
                     "state": self.get_state_public_key(),
                     "filler": filler_pubkey,
                     "filler_stats": filler_stats_pubkey,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 }
             )
         )
@@ -2182,7 +2210,7 @@ class DriftClient:
                     "state": self.get_state_public_key(),
                     "filler": filler,
                     "user": user_account_pubkey,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -2221,7 +2249,7 @@ class DriftClient:
                     "state": self.get_state_public_key(),
                     "filler": filler,
                     "user": user_account_pubkey,
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             )
@@ -2350,7 +2378,7 @@ class DriftClient:
             ctx=Context(
                 accounts={
                     "state": self.get_state_public_key(),
-                    "authority": self.authority,
+                    "authority": self.wallet.payer.pubkey(),
                 },
                 remaining_accounts=remaining_accounts,
             ),
@@ -2387,7 +2415,8 @@ class DriftClient:
                 AccountMeta(pubkey=account, is_signer=False, is_writable=True),
                 AccountMeta(pubkey=owner, is_signer=False, is_writable=False),
                 AccountMeta(pubkey=mint, is_signer=False, is_writable=False),
-                AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
+                AccountMeta(pubkey=SYS_PROGRAM_ID,
+                            is_signer=False, is_writable=False),
                 AccountMeta(
                     pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False
                 ),
@@ -2417,7 +2446,8 @@ class DriftClient:
         user_accounts = []
 
         try:
-            user_accounts.append(self.get_user().get_user_account_and_slot().data)
+            user_accounts.append(
+                self.get_user().get_user_account_and_slot().data)
         except:
             pass  # ignore
 
@@ -2492,7 +2522,7 @@ class DriftClient:
         quote=None,
         reduce_only: Optional[SwapReduceOnly] = None,
         user_account_public_key: Optional[Pubkey] = None,
-    ):
+    ) -> Tuple[list[Instruction], list[AddressLookupTableAccount]]:
         pre_instructions: list[Instruction] = []
         JUPITER_URL = "https://quote-api.jup.ag/v6"
 
@@ -2554,7 +2584,8 @@ class DriftClient:
 
         swap_ix_resp = requests.post(
             f"{JUPITER_URL}/swap-instructions",
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            headers={"Accept": "application/json",
+                     "Content-Type": "application/json"},
             data=json.dumps(data),
         )
 
@@ -2563,11 +2594,18 @@ class DriftClient:
 
         swap_ix_json = swap_ix_resp.json()
 
-        compute_budget_ix = swap_ix_json.get("computeBudgetInstructions")
         swap_ix = swap_ix_json.get("swapInstruction")
         address_table_lookups = swap_ix_json.get("addressLookupTableAddresses")
 
-        swap_ixs = [compute_budget_ix, swap_ix]
+        address_table_lookup_accounts: list[AddressLookupTableAccount] = []
+
+        for table_pubkey in address_table_lookups:
+            address_table_lookup_account = await get_address_lookup_table(
+                self.connection, Pubkey.from_string(table_pubkey)
+            )
+            address_table_lookup_accounts.append(address_table_lookup_account)
+
+        swap_ixs = [swap_ix]
 
         begin_swap_ix, end_swap_ix = await self.get_swap_flash_loan_ix(
             out_market_idx,
@@ -2581,8 +2619,32 @@ class DriftClient:
         )
 
         ixs = [*pre_instructions, begin_swap_ix, *swap_ixs, end_swap_ix]
+        cleansed_ixs: list[Instruction] = []
 
-        return ixs, address_table_lookups
+        for ix in ixs:
+            if type(ix) == list:
+                for i in ix:
+                    if type(i) == dict:
+                        cleansed_ixs.append(self._dict_to_instructions(i))
+            elif type(ix) == dict:
+                cleansed_ixs.append(self._dict_to_instructions(ix))
+            else:
+                cleansed_ixs.append(ix)
+
+        return cleansed_ixs, address_table_lookup_accounts
+
+    def _dict_to_instructions(self, instructions_dict: dict) -> Instruction:
+        program_id = Pubkey.from_string(instructions_dict["programId"])
+        accounts = [
+            AccountMeta(
+                Pubkey.from_string(account["pubkey"]),
+                account["isSigner"],
+                account["isWritable"],
+            )
+            for account in instructions_dict["accounts"]
+        ]
+        data = base64.b64decode(instructions_dict["data"])
+        return Instruction(program_id, data, accounts)
 
     def get_perp_market_accounts(self) -> list[PerpMarketAccount]:
         return [
@@ -2616,3 +2678,51 @@ class DriftClient:
                 return (spot_market_account.market_index, MarketType.Spot())
 
         return None  # explicitly return None if no match is found
+
+    def get_update_user_margin_trading_enabled_ix(
+        self,
+        margin_trading_enabled: bool,
+        sub_account_id: Optional[int] = None,
+    ) -> Instruction:
+        sub_account_id = self.get_sub_account_id_for_ix(sub_account_id)
+
+        remaining_accounts = self.get_remaining_accounts(
+            user_accounts=[self.get_user_account(sub_account_id)],
+        )
+
+        return self.program.instruction["update_user_margin_trading_enabled"](
+            sub_account_id,
+            margin_trading_enabled,
+            ctx=Context(
+                accounts={
+                    "user": self.get_user_account_public_key(sub_account_id),
+                    "authority": self.wallet.payer.pubkey(),
+                },
+                remaining_accounts=remaining_accounts,
+            ),
+        )
+
+    async def update_user_margin_trading_enabled(
+            self,
+            margin_trading_enabled: bool,
+            sub_account_id: Optional[int] = None
+    ):
+        """Toggles margin trading for a user
+
+        Args:
+            sub_account_id (int, optional): subaccount id. Defaults to 0.
+
+        Returns:
+            str: tx sig
+        """
+        await self.add_user(sub_account_id)
+
+        tx_sig = await self.send_ixs(
+            [
+                self.get_update_user_margin_trading_enabled_ix(
+                    margin_trading_enabled=margin_trading_enabled,
+                    sub_account_id=sub_account_id,
+                )
+            ]
+        ).tx_sig
+        return tx_sig
